@@ -16,7 +16,7 @@ import { ArrowLeft, Settings, Clock } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { QueueManagement } from "@/components/Management";
-import { QueueInsights } from "@/components/Insights";
+import { QueueInsights } from "@/components/Insight";
 
 // Sample queue data
 const queueData = {
