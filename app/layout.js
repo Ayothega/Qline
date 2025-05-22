@@ -1,4 +1,3 @@
-import Navbarui from "@/components/Navbarui";
 import "./globals.css";
 import {
   ClerkProvider,
@@ -7,22 +6,27 @@ import {
   SignedIn,
   SignedOut,
   UserButton,
-} from '@clerk/nextjs'
+} from "@clerk/nextjs";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata = {
   title: "Qline",
-  description: "Queue Management app",
+  description: "Ai powered Queue Management app",
 };
 
 export default function RootLayout({ children }) {
   return (
     <ClerkProvider>
-    <html lang="en">
-      <body>
-        <Navbarui />
-        {children}
-      </body>
-    </html>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <html lang="en">
+          <body>{children}</body>
+        </html>
+      </ThemeProvider>
     </ClerkProvider>
   );
 }
