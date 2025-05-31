@@ -8,43 +8,101 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Users, Info, Mail, Phone, Bell, QrCode, ArrowLeft } from "lucide-react"
+import { Users, Info, Mail, Phone, Bell, QrCode, ArrowLeft, Zap } from "lucide-react"
 import Link from "next/link"
 import { motion } from "framer-motion"
+import { usePusher } from "@/hooks/usePusher"
 
 export default function MyQueuePage() {
   const router = useRouter()
+  const { isConnected, subscribeToQueue, unsubscribeFromQueue } = usePusher()
   const [queueInfo, setQueueInfo] = useState(null)
   const [loading, setLoading] = useState(true)
   const [progress, setProgress] = useState(0)
   const [timeRemaining, setTimeRemaining] = useState("")
 
   useEffect(() => {
-    // Get queue info from localStorage
-    const storedQueue = localStorage.getItem("currentQueue")
-    if (storedQueue) {
-      const parsedQueue = JSON.parse(storedQueue)
-      setQueueInfo(parsedQueue)
-
-      // Calculate progress based on wait time
-      const waitTimeMinutes = Number.parseInt(parsedQueue.waitTime.split(" ")[0])
-      const joinedTime = new Date(parsedQueue.joinedAt).getTime()
-      const currentTime = new Date().getTime()
-      const elapsedMinutes = Math.floor((currentTime - joinedTime) / (1000 * 60))
-
-      const calculatedProgress = Math.min(Math.floor((elapsedMinutes / waitTimeMinutes) * 100), 99)
-      setProgress(calculatedProgress)
-
-      // Calculate time remaining
-      const remainingMinutes = Math.max(waitTimeMinutes - elapsedMinutes, 1)
-      setTimeRemaining(`${remainingMinutes} min`)
-    }
-    setLoading(false)
+    fetchMyQueue()
   }, [])
 
-  const handleLeaveQueue = () => {
-    localStorage.removeItem("currentQueue")
-    router.push("/queues")
+  useEffect(() => {
+    if (queueInfo?.id && isConnected) {
+      const channel = subscribeToQueue(queueInfo.id)
+
+      // Listen for position updates
+      channel.bind("position-updated", (data) => {
+        const userId = localStorage.getItem("userId")
+        if (data.updates) {
+          const userUpdate = data.updates.find((update) => update.userId === userId)
+          if (userUpdate) {
+            setQueueInfo((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    position: userUpdate.position,
+                    waitTime: userUpdate.waitTime,
+                  }
+                : null,
+            )
+
+            // Update progress
+            const calculatedProgress = Math.min(Math.floor(100 - userUpdate.position * 10), 99)
+            setProgress(calculatedProgress)
+            setTimeRemaining(userUpdate.waitTime)
+          }
+        }
+      })
+
+      return () => {
+        unsubscribeFromQueue(queueInfo.id)
+      }
+    }
+  }, [queueInfo?.id, isConnected, subscribeToQueue, unsubscribeFromQueue])
+
+  const fetchMyQueue = async () => {
+    try {
+      const response = await fetch("/api/my-queue")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.id) {
+          setQueueInfo(data)
+
+          // Calculate progress based on position
+          const calculatedProgress = Math.min(Math.floor(100 - data.position * 10), 99)
+          setProgress(calculatedProgress)
+
+          // Set time remaining
+          setTimeRemaining(data.waitTime)
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching queue status:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLeaveQueue = async () => {
+    if (!queueInfo) return
+
+    try {
+      // Find the entry ID (you might need to modify the API to return this)
+      const response = await fetch(`/api/queues/${queueInfo.id}/entries/${queueInfo.entryId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        localStorage.removeItem("currentQueue")
+        localStorage.removeItem("userId")
+        router.push("/queues")
+      }
+    } catch (error) {
+      console.error("Error leaving queue:", error)
+      // Fallback to localStorage removal
+      localStorage.removeItem("currentQueue")
+      localStorage.removeItem("userId")
+      router.push("/queues")
+    }
   }
 
   if (loading) {
@@ -117,7 +175,16 @@ export default function MyQueuePage() {
             >
               <div>
                 <h1 className="text-3xl font-bold">My Queue Status</h1>
-                <p className="text-gray-600 dark:text-gray-300">Track your position and estimated wait time</p>
+                <p className="text-gray-600 dark:text-gray-300">Track your position with real-time Pusher updates</p>
+              </div>
+
+              {/* Pusher Connection Status */}
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}></div>
+                <span className="text-sm text-gray-600 dark:text-gray-300">
+                  {isConnected ? "Pusher connected" : "Connecting to Pusher..."}
+                </span>
+                <Zap className={`h-4 w-4 ${isConnected ? "text-green-500" : "text-red-500"}`} />
               </div>
             </motion.div>
           </div>
@@ -137,18 +204,35 @@ export default function MyQueuePage() {
                       {new Date(queueInfo.joinedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </CardDescription>
                   </div>
-                  <Badge className="bg-purple-600">Active</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-purple-600">Active</Badge>
+                    {isConnected && (
+                      <Badge variant="outline" className="border-green-500 text-green-600">
+                        <Zap className="h-3 w-3 mr-1" />
+                        Pusher Live
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="text-center mb-8">
-                  <div className="inline-flex items-center justify-center h-24 w-24 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-3xl font-bold mb-4">
+                  <motion.div
+                    className="inline-flex items-center justify-center h-24 w-24 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-3xl font-bold mb-4"
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
+                  >
                     #{queueInfo.position}
-                  </div>
+                  </motion.div>
                   <h3 className="text-xl font-semibold mb-2">Your position in line</h3>
                   <p className="text-gray-600 dark:text-gray-300 mb-4">
                     Estimated wait time: <span className="font-medium">{timeRemaining}</span>
                   </p>
+                  {isConnected && (
+                    <div className="text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 p-2 rounded-lg">
+                      ⚡ Real-time updates via Pusher - you'll be notified instantly when it's almost your turn!
+                    </div>
+                  )}
                 </div>
 
                 <div className="mb-8">
@@ -157,6 +241,7 @@ export default function MyQueuePage() {
                     <span>Almost there!</span>
                   </div>
                   <Progress value={progress} className="h-2" />
+                  <div className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">{progress}% complete</div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -195,6 +280,16 @@ export default function MyQueuePage() {
                           </div>
                         </div>
                       )}
+
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap className="h-4 w-4 text-green-500" />
+                        <div>
+                          <div className="font-medium">Pusher real-time updates</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {isConnected ? "Connected and active" : "Reconnecting..."}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -202,11 +297,11 @@ export default function MyQueuePage() {
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-900/50">
                   <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-medium mb-2">
                     <Info className="h-4 w-4" />
-                    <span>Queue Updates</span>
+                    <span>Real-time Queue Updates</span>
                   </div>
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    You'll receive a notification when you're 3rd in line and when it's your turn. Make sure to be
-                    ready!
+                    Powered by Pusher, you'll receive instant notifications when you're 3rd in line and when it's your
+                    turn. Your position updates automatically as people are served - no need to refresh!
                   </p>
                 </div>
               </CardContent>

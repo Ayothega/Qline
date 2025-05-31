@@ -12,6 +12,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 export const metadata = {
   title: "Qline",
   description: "Ai powered Queue Management app",
+    generator: 'v0.dev'
 };
 
 export default function RootLayout({ children }) {

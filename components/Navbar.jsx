@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/Modetoggle";
-import { Menu, X, Clock } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { SignInButton, SignedOut } from "@clerk/nextjs";
+import { SignInButton, SignedOut, SignedIn, UserButton } from "@clerk/nextjs";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -42,44 +42,56 @@ export function Navbar() {
             </div>
           </Link>
 
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link
-              href="/queues"
-              className="text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-            >
-              Browse Queues
-            </Link>
-            <Link
-              href="/how-it-works"
-              className="text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-            >
-              How It Works
-            </Link>
+            <SignedIn>
+              <Link
+                href="/queues"
+                className="text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+              >
+                Browse Queues
+              </Link>
 
-            <Link
-              href="/my-queue"
-              className="text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-            >
-              My Queue
-            </Link>
+              <Link
+                href="/my-queue"
+                className="text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+              >
+                My Queue
+              </Link>
+              <Link
+                href="/admin/create"
+                className="text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+              >
+                Create Queue
+              </Link>
+              <Link
+                href="/admin/dashboard"
+                className="text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+              >
+                Dashboard
+              </Link>
+            </SignedIn>
           </nav>
 
           <div className="flex items-center space-x-4">
             <div className="hidden md:flex items-center space-x-2">
               <SignedOut>
                 <SignInButton mode="modal">
-                  <Button variant="outline" size="sm" asChild>
-                    <span className="pointer">Log in</span>
+                  <Button variant="outline" size="sm">
+                    Log in
                   </Button>
                 </SignInButton>
               </SignedOut>
-              {/*<Button
-                asChild
-                size="sm"
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-              >
-                <Link href="/admin/create">Create Queue</Link>
-              </Button>*/}
+
+              <SignedIn>
+                <UserButton
+                  appearance={{
+                    elements: {
+                      avatarBox: "h-8 w-8",
+                    },
+                  }}
+                />
+              </SignedIn>
             </div>
 
             <ModeToggle />
@@ -98,6 +110,7 @@ export function Navbar() {
         </div>
       </div>
 
+      {/* Mobile Navigation */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
@@ -114,37 +127,51 @@ export function Navbar() {
               >
                 Browse Queues
               </Link>
-              <Link
-                href="/how-it-works"
-                className="block py-2 text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                How It Works
-              </Link>
-              <Link
-                href="/my-queue"
-                className="block py-2 text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                My Queue
-              </Link>
+
+              <SignedIn>
+                <Link
+                  href="/my-queue"
+                  className="block py-2 text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  My Queue
+                </Link>
+                <Link
+                  href="/admin/create"
+                  className="block py-2 text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Create Queue
+                </Link>
+                <Link
+                  href="/admin/dashboard"
+                  className="block py-2 text-gray-700 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Dashboard
+                </Link>
+              </SignedIn>
+
               <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex flex-col space-y-2">
                 <SignedOut>
                   <SignInButton mode="modal">
-                    <Button variant="outline" size="sm" asChild>
-                      <span className="pointer">Log in</span>
+                    <Button variant="outline" size="sm" className="w-full">
+                      Log in
                     </Button>
                   </SignInButton>
                 </SignedOut>
-                {/* <Button
-                  asChild
-                  size="sm"
-                  className="justify-center bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                >
-                  <Link href="/admin/create" onClick={() => setIsMobileMenuOpen(false)}>
-                    Create Queue
-                  </Link>
-                </Button> */}
+
+                <SignedIn>
+                  <div className="flex justify-center">
+                    <UserButton
+                      appearance={{
+                        elements: {
+                          avatarBox: "h-8 w-8",
+                        },
+                      }}
+                    />
+                  </div>
+                </SignedIn>
               </div>
             </div>
           </motion.div>

@@ -1,96 +1,180 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  ArrowLeft,
-  Clock,
-  Users,
-  MapPin,
-  Info,
-  Mail,
-  Phone,
-} from "lucide-react";
-import Link from "next/link";
-import { motion } from "framer-motion";
-
-// Sample queue data (would come from an API in a real app)
-const queueData = {
-  id: "6",
-  name: "Item 7 go",
-  location: "FMM9+859, Ilorin 240102, Kwara",
-  waitTime: "30 min",
-  peopleInQueue: 28,
-  category: "Food & Drink",
-  description:
-    "Join our queue to order your favorite food and drinks. We'll notify you when it's your turn to order.",
-  requiredFields: [
-    { id: "name", label: "Full Name", type: "text", required: true },
-    { id: "email", label: "Email Address", type: "email", required: true },
-    { id: "phone", label: "Phone Number", type: "tel", required: false },
-    { id: "groupSize", label: "Group Size", type: "number", required: true },
-    {
-      id: "notes",
-      label: "Special Requests",
-      type: "textarea",
-      required: false,
-    },
-  ],
-};
+import { useState, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { Navbar } from "@/components/Navbar"
+import { Footer } from "@/components/Footer"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ArrowLeft, Clock, Users, MapPin, Info, Mail, Phone, Brain, Wifi } from "lucide-react"
+import Link from "next/link"
+import { motion } from "framer-motion"
+import { usePusher } from "@/hooks/usePusher"
 
 export default function QueueDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const queueId = params.id;
+  const params = useParams()
+  const router = useRouter()
+  const queueId = params.id
+  const { isConnected, subscribeToQueue, unsubscribeFromQueue } = usePusher()
 
-  const [formData, setFormData] = useState({});
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [joinSuccess, setJoinSuccess] = useState(false);
-  const [queuePosition, setQueuePosition] = useState(0);
+  const [queueData, setQueueData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [formData, setFormData] = useState({})
+  const [agreeToTerms, setAgreeToTerms] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [joinSuccess, setJoinSuccess] = useState(false)
+  const [queuePosition, setQueuePosition] = useState(0)
+  const [aiPrediction, setAiPrediction] = useState("")
+  const [loadingPrediction, setLoadingPrediction] = useState(false)
+
+  useEffect(() => {
+    fetchQueueData()
+    if (queueId) {
+      getPrediction()
+    }
+  }, [queueId])
+
+  useEffect(() => {
+    if (queueId && isConnected) {
+      const channel = subscribeToQueue(queueId)
+
+      // Listen for queue updates
+      channel.bind("queue-updated", (data) => {
+        setQueueData((prev) => (prev ? { ...prev, ...data } : null))
+      })
+
+      // Listen for position updates
+      channel.bind("position-updated", (data) => {
+        const userId = localStorage.getItem("userId")
+        if (data.updates) {
+          const userUpdate = data.updates.find((update) => update.userId === userId)
+          if (userUpdate) {
+            setQueuePosition(userUpdate.position)
+          }
+        }
+      })
+
+      return () => {
+        unsubscribeFromQueue(queueId)
+      }
+    }
+  }, [queueId, isConnected, subscribeToQueue, unsubscribeFromQueue])
+
+  const fetchQueueData = async () => {
+    try {
+      const response = await fetch(`/api/queues/${queueId}`)
+      if (!response.ok) {
+        throw new Error("Queue not found")
+      }
+      const data = await response.json()
+      setQueueData(data)
+    } catch (error) {
+      console.error("Error fetching queue:", error)
+      router.push("/queues")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getPrediction = async () => {
+    try {
+      setLoadingPrediction(true)
+      const response = await fetch("/api/ai/predict-wait", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queueId }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setAiPrediction(data.prediction)
+      }
+    } catch (error) {
+      console.error("Error getting AI prediction:", error)
+    } finally {
+      setLoadingPrediction(false)
+    }
+  }
 
   const handleInputChange = (id, value) => {
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
+    setFormData((prev) => ({ ...prev, [id]: value }))
+  }
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setIsSubmitting(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setJoinSuccess(true);
-      setQueuePosition(queueData.peopleInQueue + 1);
+    try {
+      const response = await fetch(`/api/queues/${queueId}/join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to join queue")
+      }
+
+      const result = await response.json()
+      setJoinSuccess(true)
+      setQueuePosition(result.position)
 
       // Store queue info in localStorage for the my-queue page
       const queueInfo = {
         id: queueId,
         name: queueData.name,
-        position: queueData.peopleInQueue + 1,
-        waitTime: `${(queueData.peopleInQueue + 1) * 2} min`,
-        joinedAt: new Date().toISOString(),
+        position: result.position,
+        waitTime: result.estimatedWaitTime,
+        joinedAt: result.joinedAt,
         userData: formData,
-      };
-      localStorage.setItem("currentQueue", JSON.stringify(queueInfo));
-    }, 1500);
-  };
+      }
+      localStorage.setItem("currentQueue", JSON.stringify(queueInfo))
+      localStorage.setItem("userId", result.id) // Store for real-time updates
+    } catch (error) {
+      console.error("Error joining queue:", error)
+      alert(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin h-8 w-8 border-4 border-purple-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-300">Loading queue details...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  if (!queueData) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold mb-4">Queue Not Found</h1>
+            <Button onClick={() => router.push("/queues")}>Back to Queues</Button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -104,23 +188,25 @@ export default function QueueDetailPage() {
               </Link>
             </Button>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
               <Card>
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-2xl">
-                        {queueData.name}
-                      </CardTitle>
+                      <CardTitle className="text-2xl">{queueData.name}</CardTitle>
                       <CardDescription className="flex items-center gap-1 mt-1">
                         <MapPin className="h-3 w-3" /> {queueData.location}
                       </CardDescription>
                     </div>
-                    <Badge>{queueData.category}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge>{queueData.category}</Badge>
+                      {isConnected && (
+                        <Badge variant="outline" className="border-green-500 text-green-600">
+                          <Wifi className="h-3 w-3 mr-1" />
+                          Live
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -130,12 +216,8 @@ export default function QueueDetailPage() {
                         <Clock className="h-5 w-5 text-orange-500" />
                       </div>
                       <div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          Current wait time
-                        </div>
-                        <div className="font-semibold">
-                          {queueData.waitTime}
-                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">Current wait time</div>
+                        <div className="font-semibold">{queueData.waitTime}</div>
                       </div>
                     </div>
 
@@ -144,12 +226,8 @@ export default function QueueDetailPage() {
                         <Users className="h-5 w-5 text-blue-500" />
                       </div>
                       <div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          People in queue
-                        </div>
-                        <div className="font-semibold">
-                          {queueData.peopleInQueue}
-                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">People in queue</div>
+                        <div className="font-semibold">{queueData.peopleInQueue}</div>
                       </div>
                     </div>
 
@@ -158,21 +236,38 @@ export default function QueueDetailPage() {
                         <Info className="h-5 w-5 text-purple-500" />
                       </div>
                       <div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          Your position if you join now
-                        </div>
-                        <div className="font-semibold">
-                          #{queueData.peopleInQueue + 1}
-                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">Your position if you join now</div>
+                        <div className="font-semibold">#{queueData.peopleInQueue + 1}</div>
                       </div>
                     </div>
                   </div>
 
+                  {/* Real-time Connection Status */}
+                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-900/50">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}></div>
+                      <span className="text-sm font-medium">
+                        {isConnected ? "🔔 Real-time updates active" : "⚠️ Connecting to live updates..."}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* AI Prediction */}
+                  {aiPrediction && (
+                    <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-900/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                        <h3 className="font-medium text-purple-700 dark:text-purple-400">AI Wait Time Prediction</h3>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {loadingPrediction ? "Analyzing queue patterns..." : aiPrediction}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="mb-6">
                     <h3 className="font-medium mb-2">About this queue</h3>
-                    <p className="text-gray-600 dark:text-gray-300">
-                      {queueData.description}
-                    </p>
+                    <p className="text-gray-600 dark:text-gray-300">{queueData.description}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -188,10 +283,7 @@ export default function QueueDetailPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Join the Queue</CardTitle>
-                  <CardDescription>
-                    Fill out the required information to secure your spot in
-                    line.
-                  </CardDescription>
+                  <CardDescription>Fill out the required information to secure your spot in line.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit}>
@@ -199,10 +291,7 @@ export default function QueueDetailPage() {
                       {queueData.requiredFields.map((field) => (
                         <div key={field.id} className="space-y-2">
                           <Label htmlFor={field.id}>
-                            {field.label}{" "}
-                            {field.required && (
-                              <span className="text-red-500">*</span>
-                            )}
+                            {field.label} {field.required && <span className="text-red-500">*</span>}
                           </Label>
 
                           {field.type === "textarea" ? (
@@ -211,9 +300,7 @@ export default function QueueDetailPage() {
                               placeholder={`Enter ${field.label.toLowerCase()}`}
                               required={field.required}
                               value={formData[field.id] || ""}
-                              onChange={(e) =>
-                                handleInputChange(field.id, e.target.value)
-                              }
+                              onChange={(e) => handleInputChange(field.id, e.target.value)}
                             />
                           ) : (
                             <Input
@@ -222,9 +309,7 @@ export default function QueueDetailPage() {
                               placeholder={`Enter ${field.label.toLowerCase()}`}
                               required={field.required}
                               value={formData[field.id] || ""}
-                              onChange={(e) =>
-                                handleInputChange(field.id, e.target.value)
-                              }
+                              onChange={(e) => handleInputChange(field.id, e.target.value)}
                             />
                           )}
                         </div>
@@ -234,16 +319,14 @@ export default function QueueDetailPage() {
                         <Checkbox
                           id="terms"
                           checked={agreeToTerms}
-                          onCheckedChange={(checked) =>
-                            setAgreeToTerms(checked)
-                          }
+                          onCheckedChange={(checked) => setAgreeToTerms(checked)}
                           required
                         />
                         <label
                           htmlFor="terms"
                           className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                         >
-                          I agree to receive notifications about my queue status
+                          I agree to receive real-time notifications about my queue status via Pusher
                         </label>
                       </div>
                     </div>
@@ -277,12 +360,7 @@ export default function QueueDetailPage() {
                       viewBox="0 0 24 24"
                       stroke="currentColor"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     Successfully Joined Queue!
                   </CardTitle>
@@ -292,15 +370,13 @@ export default function QueueDetailPage() {
                     <div className="inline-flex items-center justify-center h-24 w-24 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-3xl font-bold mb-4">
                       #{queuePosition}
                     </div>
-                    <h3 className="text-xl font-semibold mb-2">
-                      Your position in line
-                    </h3>
+                    <h3 className="text-xl font-semibold mb-2">Your position in line</h3>
                     <p className="text-gray-600 dark:text-gray-300 mb-4">
-                      Estimated wait time:{" "}
-                      <span className="font-medium">
-                        ~{queuePosition * 2} minutes
-                      </span>
+                      Estimated wait time: <span className="font-medium">~{queuePosition * 2} minutes</span>
                     </p>
+                    <div className="text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
+                      🔔 You'll receive real-time updates via Pusher as the queue moves!
+                    </div>
                   </div>
 
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6">
@@ -308,8 +384,7 @@ export default function QueueDetailPage() {
                       <Info className="h-4 w-4" /> Queue Information
                     </h4>
                     <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                      <span className="font-medium">{queueData.name}</span> -{" "}
-                      {queueData.location}
+                      <span className="font-medium">{queueData.name}</span> - {queueData.location}
                     </p>
                     <div className="flex items-center gap-4 text-sm">
                       <div className="flex items-center gap-1">
@@ -319,6 +394,10 @@ export default function QueueDetailPage() {
                       <div className="flex items-center gap-1">
                         <Users className="h-3 w-3 text-blue-500" />
                         <span>In queue: {queueData.peopleInQueue}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Wifi className={`h-3 w-3 ${isConnected ? "text-green-500" : "text-red-500"}`} />
+                        <span>{isConnected ? "Live updates" : "Connecting..."}</span>
                       </div>
                     </div>
                   </div>
@@ -348,8 +427,8 @@ export default function QueueDetailPage() {
                     variant="outline"
                     className="w-full sm:w-auto border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                     onClick={() => {
-                      localStorage.removeItem("currentQueue");
-                      router.push("/queues");
+                      localStorage.removeItem("currentQueue")
+                      router.push("/queues")
                     }}
                   >
                     Leave Queue
@@ -368,5 +447,5 @@ export default function QueueDetailPage() {
       </main>
       <Footer />
     </div>
-  );
+  )
 }

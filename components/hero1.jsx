@@ -61,18 +61,23 @@ export function HeroSection() {
             </p>
 
             {isSignedIn && (
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+              <div className="flex flex-col sm:flex-row gap-6 justify-center lg:justify-start">
                 <Button
                   asChild
                   size="lg"
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                  className="bg-gradient-to-r from-purple-700 to-blue-700 hover:from-purple-800 hover:to-blue-800 shadow-lg rounded-xl px-8 py-4 text-lg font-semibold transform transition-transform duration-300 hover:scale-105"
                 >
-                  <Link href="/queues">
-                    Browse Queues <ArrowRight className="ml-2 h-4 w-4" />
+                  <Link href="/queues" className="flex items-center gap-2">
+                    Browse Queues <ArrowRight className="ml-1 h-5 w-5" />
                   </Link>
                 </Button>
 
-                <Button asChild size="lg" variant="outline">
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="border-2 border-purple-700 text-purple-700 hover:bg-purple-700 hover:text-white rounded-xl px-8 py-4 text-lg font-semibold transform transition-transform duration-300 hover:scale-105"
+                >
                   <Link href="/admin/create">Create a Queue</Link>
                 </Button>
               </div>

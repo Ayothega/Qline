@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,75 +14,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle, XCircle, Clock, MessageSquare, Search, Plus, Brain } from "lucide-react"
+import { CheckCircle, XCircle, Clock, MessageSquare, Search, Plus, Brain, Zap } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
-
-// Sample queue data
-const initialPeople = [
-  {
-    id: "1",
-    name: "Sarah Johnson",
-    email: "sarah.j@example.com",
-    phone: "+1 (555) 123-4567",
-    position: 1,
-    waitTime: "2 min",
-    joinedAt: "10:45 AM",
-    notes: "Prefers window seating",
-    groupSize: 2,
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: "2",
-    name: "Michael Chen",
-    email: "michael.c@example.com",
-    phone: "+1 (555) 987-6543",
-    position: 2,
-    waitTime: "5 min",
-    joinedAt: "10:50 AM",
-    notes: "Birthday celebration",
-    groupSize: 4,
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: "3",
-    name: "Emma Wilson",
-    email: "emma.w@example.com",
-    phone: "+1 (555) 456-7890",
-    position: 3,
-    waitTime: "8 min",
-    joinedAt: "10:55 AM",
-    notes: "",
-    groupSize: 1,
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: "4",
-    name: "James Rodriguez",
-    email: "james.r@example.com",
-    phone: "+1 (555) 234-5678",
-    position: 4,
-    waitTime: "12 min",
-    joinedAt: "11:00 AM",
-    notes: "Allergic to nuts",
-    groupSize: 3,
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: "5",
-    name: "Olivia Smith",
-    email: "olivia.s@example.com",
-    phone: "+1 (555) 876-5432",
-    position: 5,
-    waitTime: "15 min",
-    joinedAt: "11:05 AM",
-    notes: "First-time visitor",
-    groupSize: 2,
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-]
+import { usePusher } from "@/hooks/usePusher"
 
 export function QueueManagement() {
-  const [people, setPeople] = useState(initialPeople)
+  const params = useParams()
+  const queueId = params?.id
+  const { isConnected, subscribeToQueue, unsubscribeFromQueue } = usePusher()
+
+  const [people, setPeople] = useState([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPerson, setSelectedPerson] = useState(null)
   const [isAddingPerson, setIsAddingPerson] = useState(false)
@@ -93,6 +36,116 @@ export function QueueManagement() {
     notes: "",
   })
 
+  useEffect(() => {
+    if (queueId) {
+      fetchQueueEntries()
+    }
+  }, [queueId])
+
+  useEffect(() => {
+    if (queueId && isConnected) {
+      const channel = subscribeToQueue(queueId)
+
+      // Listen for queue updates
+      channel.bind("queue-updated", (data) => {
+        // Refresh the queue entries when updates occur
+        fetchQueueEntries()
+      })
+
+      // Listen for position updates
+      channel.bind("position-updated", (data) => {
+        // Refresh the queue entries to show updated positions
+        fetchQueueEntries()
+      })
+
+      return () => {
+        unsubscribeFromQueue(queueId)
+      }
+    }
+  }, [queueId, isConnected, subscribeToQueue, unsubscribeFromQueue])
+
+  const fetchQueueEntries = async () => {
+    try {
+      const response = await fetch(`/api/queues/${queueId}/entries`)
+      if (response.ok) {
+        const data = await response.json()
+        setPeople(data)
+      }
+    } catch (error) {
+      console.error("Error fetching queue entries:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleServe = async (id) => {
+    try {
+      const response = await fetch(`/api/queues/${queueId}/entries/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "serve" }),
+      })
+
+      if (response.ok) {
+        // The real-time update will refresh the list automatically via Pusher
+        console.log("Person served successfully")
+      }
+    } catch (error) {
+      console.error("Error serving person:", error)
+    }
+  }
+
+  const handleSkip = async (id) => {
+    try {
+      const response = await fetch(`/api/queues/${queueId}/entries/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "skip" }),
+      })
+
+      if (response.ok) {
+        // The real-time update will refresh the list automatically via Pusher
+        console.log("Person skipped successfully")
+      }
+    } catch (error) {
+      console.error("Error skipping person:", error)
+    }
+  }
+
+  const handleAddPerson = async () => {
+    try {
+      const response = await fetch(`/api/queues/${queueId}/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newPersonData),
+      })
+
+      if (response.ok) {
+        // The real-time update will refresh the list automatically via Pusher
+        setIsAddingPerson(false)
+        setNewPersonData({
+          name: "",
+          email: "",
+          phone: "",
+          groupSize: "1",
+          notes: "",
+        })
+      }
+    } catch (error) {
+      console.error("Error adding person:", error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card className="w-full">
+        <CardContent className="flex items-center justify-center py-8">
+          <div className="animate-spin h-8 w-8 border-4 border-purple-600 border-t-transparent rounded-full"></div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   const filteredPeople = people.filter(
     (person) =>
       person.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -100,59 +153,21 @@ export function QueueManagement() {
       person.phone.includes(searchTerm),
   )
 
-  const handleServe = (id) => {
-    setPeople(people.filter((person) => person.id !== id))
-    // In a real app, you would also update positions of remaining people
-  }
-
-  const handleSkip = (id) => {
-    // Move person to the end of the queue
-    const skippedPerson = people.find((person) => person.id === id)
-    if (skippedPerson) {
-      const updatedPeople = people.filter((person) => person.id !== id)
-      setPeople([
-        ...updatedPeople,
-        {
-          ...skippedPerson,
-          position: updatedPeople.length + 1,
-          waitTime: `${updatedPeople.length * 3} min`,
-        },
-      ])
-    }
-  }
-
-  const handleAddPerson = () => {
-    const newPerson = {
-      id: `new-${Date.now()}`,
-      name: newPersonData.name,
-      email: newPersonData.email,
-      phone: newPersonData.phone,
-      position: people.length + 1,
-      waitTime: `${people.length * 3} min`,
-      joinedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      notes: newPersonData.notes,
-      groupSize: Number.parseInt(newPersonData.groupSize),
-      avatar: "/placeholder.svg?height=40&width=40",
-    }
-
-    setPeople([...people, newPerson])
-    setIsAddingPerson(false)
-    setNewPersonData({
-      name: "",
-      email: "",
-      phone: "",
-      groupSize: "1",
-      notes: "",
-    })
-  }
-
   return (
     <Card className="w-full">
       <CardHeader>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <CardTitle>Queue Management</CardTitle>
-            <CardDescription>Manage people in your active queue</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              Queue Management
+              {isConnected && (
+                <div className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                  <Zap className="h-4 w-4" />
+                  <span>Live</span>
+                </div>
+              )}
+            </CardTitle>
+            <CardDescription>Manage people in your active queue with real-time Pusher updates</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -175,6 +190,21 @@ export function QueueManagement() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* Real-time Status Indicator */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-900/50 flex items-center gap-3">
+            <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}></div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                {isConnected ? "⚡ Real-time updates active" : "🔄 Connecting to Pusher..."}
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-300">
+                {isConnected
+                  ? "Queue updates automatically when people are served or join"
+                  : "Attempting to establish real-time connection"}
+              </p>
+            </div>
+          </div>
+
           <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-100 dark:border-purple-900/50 flex gap-3 mb-6">
             <div className="shrink-0">
               <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />
